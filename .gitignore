@@ -1,0 +1,52 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.coverage
+*.log
+
+# --- Virtualenv ---
+.venv/
+venv/
+ENV/
+
+# --- IDE / Editors ---
+.vscode/
+.idea/
+*.swp
+
+# --- Airflow ---
+logs/
+airflow.db
+unittests.cfg
+dags/__pycache__/
+exporter/__pycache__/
+
+# --- Docker ---
+*.pid
+*.seed
+*.pid.lock
+docker-compose.override.yml
+
+# --- Data volumes ---
+postgres_data/
+minio_data/
+pgadmin_data/
+kafka_data/
+flink/log/
+flink/tmp/
+flink/checkpoints/
+flink/savepoints/
+
+# --- System ---
+.DS_Store
+Thumbs.db
