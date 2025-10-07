@@ -6,8 +6,8 @@ import uuid
 from datetime import datetime
 from kafka import KafkaProducer
 
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
-TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER")
+TOPIC_NAME = os.getenv("TOPIC_NAME")
 
 games = ["football", "basketball", "tennis", "hockey", "esports"]
 statuses = ["win", "lose", "pending"]

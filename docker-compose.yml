@@ -2,17 +2,19 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: bets
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       #- ./postgres-init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d bets"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -20,22 +22,31 @@ services:
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
+    env_file:
+      - .env
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com   
-      PGADMIN_DEFAULT_PASSWORD: admin          
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}   
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}          
     ports:
       - "5050:80"  
     depends_on:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/misc/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   minio:
     image: minio/minio:latest
     container_name: minio
+    env_file:
+      - .env
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -81,10 +92,19 @@ services:
       KAFKA_GROUP_ID: kowl-group
     depends_on:
       - kafka
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   topic-init:
     build: ./topic-init
     container_name: topic-init
+    env_file:
+      - .env
+    environment:
+      TOPIC_NAME: ${TOPIC_NAMES}
     depends_on:
       kafka:
         condition: service_healthy
@@ -95,9 +115,16 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      KAFKA_BROKER: kafka:9092
-      TOPIC_NAME: bets
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      TOPIC_NAME: ${TOPIC_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep python || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   bets_consumer:
     build: ./consumer
@@ -109,13 +136,20 @@ services:
       postgres:
         condition: service_healthy
     command: python all_bets_consumer.py
+    env_file:
+      - .env
     environment:
-      KAFKA_BROKER: kafka:9092
-      TOPIC_NAME: bets
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: bets
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      TOPIC_NAME: ${TOPIC_NAME}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep python || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 
   top-games-consumer:
@@ -123,19 +157,26 @@ services:
       context: ./consumer
     container_name: top-games-consumer
     restart: always 
+    env_file:
+      - .env
     environment:
-      KAFKA_BROKER: kafka:9092
+      KAFKA_BROKER: ${KAFKA_BROKER}
       TOPIC_NAME: top_games
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: bets
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
       kafka:
         condition: service_healthy
       postgres:
         condition: service_healthy
     command: python top_games_consumer.py
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep python || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   jobmanager:
     build: ./flink
@@ -165,6 +206,11 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/overview || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   taskmanager:
     build: ./flink
@@ -191,27 +237,36 @@ services:
     depends_on:
       jobmanager:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep taskmanager || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   airflow:
     build: ./airflow
     container_name: airflow
     restart: always
+    env_file:
+      - .env
     environment:
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__FERNET_KEY: "your_fernet_key"
-      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://user:password@postgres:5432/bets"
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     ports:
       - "8080:8080"
     volumes:
       - ./dags:/opt/airflow/dags
       - ./exporters:/opt/airflow/exporters
     depends_on:
-      - postgres
-      - minio
-    command: >
-      bash -c "airflow db init &&
-               airflow users create --username admin --firstname Admin --lastname Admin --role Admin --email admin@example.com --password admin &&
-               airflow scheduler & airflow webserver"
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 
 volumes:

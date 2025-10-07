@@ -36,6 +36,7 @@ exporter/__pycache__/
 *.seed
 *.pid.lock
 docker-compose.override.yml
+.env
 
 # --- Data volumes ---
 postgres_data/
