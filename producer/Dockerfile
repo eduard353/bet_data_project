@@ -8,7 +8,7 @@ RUN pip install kafka-python
 WORKDIR /app
 
 # Копируем код продюсера
-COPY producer.py /app/
+COPY bets_producer.py /app/
 
 # Запуск по умолчанию
-CMD ["python", "producer.py"]
+CMD ["python", "bets_producer.py"]

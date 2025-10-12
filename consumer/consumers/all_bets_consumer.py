@@ -1,42 +1,73 @@
 import os
 import json
-import uuid 
+import uuid
+from datetime import datetime
+from decimal import Decimal
+
 from kafka import KafkaConsumer
-from sqlalchemy import create_engine, Column, Integer, String, Numeric, TIMESTAMP, Boolean
-from sqlalchemy.dialects.postgresql import UUID 
+from sqlalchemy import (
+    create_engine, Column, Integer, String, Numeric, TIMESTAMP, Boolean, JSON
+)
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Конфиги Kafka
-KAFKA_BROKER = os.getenv("KAFKA_BROKER")
-TOPIC_NAME = os.getenv("TOPIC_NAME")
+# --- Kafka ---
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
 
-# Конфиги PostgreSQL
-POSTGRES_HOST = os.getenv("POSTGRES_HOST")
-POSTGRES_DB = os.getenv("POSTGRES_DB")
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+# --- PostgreSQL ---
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "bets_db")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
-# SQLAlchemy setup
+# --- SQLAlchemy setup ---
 DATABASE_URL = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}/{POSTGRES_DB}"
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# Определяем модель
+# --- SQLAlchemy Model ---
 class Bet(Base):
     __tablename__ = "bets"
-    bet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    game = Column(String)
-    amount = Column(Numeric)
-    status = Column(String)
-    timestamp = Column(TIMESTAMP)
-    exported = Column(Boolean, default=False, nullable=False)
 
-# Создаем таблицу, если не существует
+    bet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # User info
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    country = Column(String(5))
+    age = Column(Integer)
+    device = Column(String(50))
+    ip_address = Column(String(50))
+
+    # Event info
+    sport = Column(String(50))
+    league = Column(String(100))
+    match = Column(String(150))
+    selection = Column(String(150))
+    odds = Column(Numeric(6, 2))
+
+    # Bet info
+    amount = Column(Numeric(10, 2))
+    currency = Column(String(10))
+    status = Column(String(20))
+    payout = Column(Numeric(10, 2))
+    bet_timestamp = Column(TIMESTAMP)
+
+    # Metadata
+    source = Column(String(50))
+    session_id = Column(UUID(as_uuid=True))
+    created_at = Column(TIMESTAMP)
+
+    # Tech fields
+    exported = Column(Boolean, default=False, nullable=False)
+    raw_event = Column(JSON)  # сохраняем весь JSON для отладки
+
+# Создаём таблицу при первом запуске
 Base.metadata.create_all(engine)
 
+# --- Consumer Logic ---
 def main():
     consumer = KafkaConsumer(
         TOPIC_NAME,
@@ -44,33 +75,45 @@ def main():
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         auto_offset_reset="earliest",
         enable_auto_commit=True,
-        group_id="bets-consumer-group"
+        group_id="bets-consumer-group-v2"
     )
 
     print(f"[CONSUMER] Listening to topic: {TOPIC_NAME}")
     session = Session()
+
     for msg in consumer:
         event = msg.value
-        print(f"[CONSUMER] Received: {event}")
+        print(f"[CONSUMER] Received event: {json.dumps(event, indent=2)}")
 
         try:
             bet = Bet(
                 bet_id=uuid.UUID(event["bet_id"]),
-                user_id=uuid.UUID(event["user_id"]),
-                game=event.get("game"),
-                amount=event.get("amount"),
-                status=event.get("status"),
-                timestamp=event.get("timestamp"),
-                exported=False 
+                user_id=uuid.UUID(event["user"]["user_id"]),
+                country=event["user"].get("country"),
+                age=event["user"].get("age"),
+                device=event["user"].get("device"),
+                ip_address=event["user"].get("ip_address"),
+
+                sport=event["event"].get("sport"),
+                league=event["event"].get("league"),
+                match=event["event"].get("match"),
+                selection=event["event"].get("selection"),
+                odds=Decimal(str(event["event"].get("odds", 0))),
+
+                amount=Decimal(str(event["bet"].get("amount", 0))),
+                currency=event["bet"].get("currency"),
+                status=event["bet"].get("status"),
+                payout=Decimal(str(event["bet"].get("payout", 0))),
+                bet_timestamp=datetime.fromisoformat(event["bet"]["timestamp"].replace("Z", "+00:00")),
+
+                source=event["metadata"].get("source"),
+                session_id=uuid.UUID(event["metadata"]["session_id"]),
+                created_at=datetime.fromisoformat(event["metadata"]["created_at"].replace("Z", "+00:00")),
+
+                exported=False,
+                raw_event=event
             )
 
-            session.merge(bet)  # merge позволяет избежать дубликатов по PK
+            session.merge(bet)
             session.commit()
-        except Exception as e:
-            print(f"[ERROR] Failed to insert bet: {e}")
-            session.rollback()
-
-    session.close()
-
-if __name__ == "__main__":
-    main()
+            print(f"[CONSUMER] Stored bet {bet.bet_id} in DB.")
