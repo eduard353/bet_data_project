@@ -9,12 +9,15 @@ from sqlalchemy import (
     create_engine, Column, Integer, String, Numeric, TIMESTAMP, Boolean, JSON
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # --- Kafka ---
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
-TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
+# KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+# TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
+
+KAFKA_BROKER = 'kafka:9092'
+TOPIC_NAME = 'bets'
 
 # --- PostgreSQL ---
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
@@ -30,7 +33,7 @@ Base = declarative_base()
 
 # --- SQLAlchemy Model ---
 class Bet(Base):
-    __tablename__ = "bets"
+    __tablename__ = "bets2"
 
     bet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -69,19 +72,28 @@ Base.metadata.create_all(engine)
 
 # --- Consumer Logic ---
 def main():
-    consumer = KafkaConsumer(
-        TOPIC_NAME,
-        bootstrap_servers=[KAFKA_BROKER],
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-        auto_offset_reset="earliest",
-        enable_auto_commit=True,
-        group_id="bets-consumer-group-v2"
-    )
+    print(f"[CONSUMER] Connecting to Kafka broker: {KAFKA_BROKER}")
+    print(f"[CONSUMER] Subscribing to topic: {TOPIC_NAME}")
+    try:
+        consumer = KafkaConsumer(
+            TOPIC_NAME,
+            bootstrap_servers=[KAFKA_BROKER],
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            auto_offset_reset="earliest",
+            enable_auto_commit=False,
+            group_id=f"bets-consumer-group-{uuid.uuid4()}"
+        )
+        print("[CONSUMER] ✅ Connected successfully!")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to Kafka: {e}")
+        return  
 
     print(f"[CONSUMER] Listening to topic: {TOPIC_NAME}")
     session = Session()
-
+    print(consumer)
     for msg in consumer:
+        if msg is None:
+            print("[CONSUMER] No messages yet...")
         event = msg.value
         print(f"[CONSUMER] Received event: {json.dumps(event, indent=2)}")
 
@@ -117,3 +129,10 @@ def main():
             session.merge(bet)
             session.commit()
             print(f"[CONSUMER] Stored bet {bet.bet_id} in DB.")
+
+        except Exception as e:
+            session.rollback()
+            print(f"[ERROR] Failed to store event: {e}")
+
+if __name__ == "__main__":
+    main()
