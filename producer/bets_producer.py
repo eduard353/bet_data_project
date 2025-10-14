@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta
 from kafka import KafkaProducer
 
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")  # Используем имя сервиса из docker-compose
 TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
 
 sports = {

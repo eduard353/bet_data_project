@@ -13,14 +13,12 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # --- Kafka ---
-# KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
-# TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")  # Используем имя сервиса из docker-compose
+TOPIC_NAME = os.getenv("TOPIC_NAME", "bets")
 
-KAFKA_BROKER = 'kafka:9092'
-TOPIC_NAME = 'bets'
 
 # --- PostgreSQL ---
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")  # Используем имя сервиса из docker-compose
 POSTGRES_DB = os.getenv("POSTGRES_DB", "bets_db")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
@@ -90,49 +88,62 @@ def main():
 
     print(f"[CONSUMER] Listening to topic: {TOPIC_NAME}")
     session = Session()
-    print(consumer)
-    for msg in consumer:
-        if msg is None:
-            print("[CONSUMER] No messages yet...")
-        event = msg.value
-        print(f"[CONSUMER] Received event: {json.dumps(event, indent=2)}")
+    print(f"[CONSUMER] Consumer object: {consumer}")
+    
+    try:
+        for msg in consumer:
+            if msg is None:
+                print("[CONSUMER] No messages yet...")
+                continue
+                
+            event = msg.value
+            print(f"[CONSUMER] Received event: {json.dumps(event, indent=2)}")
 
-        try:
-            bet = Bet(
-                bet_id=uuid.UUID(event["bet_id"]),
-                user_id=uuid.UUID(event["user"]["user_id"]),
-                country=event["user"].get("country"),
-                age=event["user"].get("age"),
-                device=event["user"].get("device"),
-                ip_address=event["user"].get("ip_address"),
+            try:
+                bet = Bet(
+                    bet_id=uuid.UUID(event["bet_id"]),
+                    user_id=uuid.UUID(event["user"]["user_id"]),
+                    country=event["user"].get("country"),
+                    age=event["user"].get("age"),
+                    device=event["user"].get("device"),
+                    ip_address=event["user"].get("ip_address"),
 
-                sport=event["event"].get("sport"),
-                league=event["event"].get("league"),
-                match=event["event"].get("match"),
-                selection=event["event"].get("selection"),
-                odds=Decimal(str(event["event"].get("odds", 0))),
+                    sport=event["event"].get("sport"),
+                    league=event["event"].get("league"),
+                    match=event["event"].get("match"),
+                    selection=event["event"].get("selection"),
+                    odds=Decimal(str(event["event"].get("odds", 0))),
 
-                amount=Decimal(str(event["bet"].get("amount", 0))),
-                currency=event["bet"].get("currency"),
-                status=event["bet"].get("status"),
-                payout=Decimal(str(event["bet"].get("payout", 0))),
-                bet_timestamp=datetime.fromisoformat(event["bet"]["timestamp"].replace("Z", "+00:00")),
+                    amount=Decimal(str(event["bet"].get("amount", 0))),
+                    currency=event["bet"].get("currency"),
+                    status=event["bet"].get("status"),
+                    payout=Decimal(str(event["bet"].get("payout", 0))),
+                    bet_timestamp=datetime.fromisoformat(event["bet"]["timestamp"].replace("Z", "+00:00")),
 
-                source=event["metadata"].get("source"),
-                session_id=uuid.UUID(event["metadata"]["session_id"]),
-                created_at=datetime.fromisoformat(event["metadata"]["created_at"].replace("Z", "+00:00")),
+                    source=event["metadata"].get("source"),
+                    session_id=uuid.UUID(event["metadata"]["session_id"]),
+                    created_at=datetime.fromisoformat(event["metadata"]["created_at"].replace("Z", "+00:00")),
 
-                exported=False,
-                raw_event=event
-            )
+                    exported=False,
+                    raw_event=event
+                )
 
-            session.merge(bet)
-            session.commit()
-            print(f"[CONSUMER] Stored bet {bet.bet_id} in DB.")
+                session.merge(bet)
+                session.commit()
+                print(f"[CONSUMER] Stored bet {bet.bet_id} in DB.")
 
-        except Exception as e:
-            session.rollback()
-            print(f"[ERROR] Failed to store event: {e}")
+            except Exception as e:
+                session.rollback()
+                print(f"[ERROR] Failed to store event: {e}")
+                continue
+
+    except KeyboardInterrupt:
+        print("[CONSUMER] Shutting down...")
+    except Exception as e:
+        print(f"[ERROR] Consumer error: {e}")
+    finally:
+        consumer.close()
+        session.close()
 
 if __name__ == "__main__":
     main()
