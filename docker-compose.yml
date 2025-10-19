@@ -93,8 +93,9 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
       interval: 10s
@@ -119,16 +120,16 @@ services:
       timeout: 10s
       retries: 3
 
-  topic-init:
-    build: ./topic-init
-    container_name: topic-init
-    env_file:
-      - .env
-    environment:
-      TOPIC_NAME: ${TOPIC_NAMES}
-    depends_on:
-      kafka:
-        condition: service_healthy
+  # topic-init:
+  #   build: ./topic-init
+  #   container_name: topic-init
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     TOPIC_NAME: ${TOPIC_NAMES}
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
 
   producer:
     build: ./producer
