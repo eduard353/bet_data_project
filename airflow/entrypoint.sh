@@ -13,5 +13,6 @@ airflow users create \
   --email "${AIRFLOW_ADMIN_EMAIL}" \
   --password "${AIRFLOW_ADMIN_PASSWORD}"
 
-# Запускаем webserver
+# Запускаем scheduler в фоне и webserver в форграунде
+airflow scheduler &
 exec airflow webserver
