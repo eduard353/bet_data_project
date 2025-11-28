@@ -1,0 +1,116 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'bet-de-cluster'
+    environment: 'development'
+
+# Alertmanager configuration (опционально)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alerts.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Kafka Exporter
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          service: 'kafka'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+
+  # Node Exporter (системные метрики)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node'
+
+  # cAdvisor (метрики Docker контейнеров)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'docker'
+
+  # Flink JobManager (встроенные метрики)
+  - job_name: 'flink-jobmanager'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['jobmanager:9249']
+        labels:
+          service: 'flink'
+          component: 'jobmanager'
+
+  # Flink TaskManager (Prometheus reporter на порту 9249)
+  - job_name: 'flink-taskmanager'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['taskmanager:9249']
+        labels:
+          service: 'flink'
+          component: 'taskmanager'
+
+  # Airflow метрики через StatsD Exporter (рекомендуемый способ)
+  - job_name: 'airflow-statsd'
+    static_configs:
+      - targets: ['statsd-exporter:9102']
+        labels:
+          service: 'airflow'
+          source: 'statsd'
+
+  # Airflow встроенный endpoint (альтернативный способ, может требовать аутентификацию)
+  # - job_name: 'airflow'
+  #   metrics_path: '/admin/metrics'
+  #   static_configs:
+  #     - targets: ['airflow:8080']
+  #       labels:
+  #         service: 'airflow'
+  #         source: 'builtin'
+    # Раскомментируйте, если требуется аутентификация
+    # basic_auth:
+    #   username: 'admin'
+    #   password: 'admin'
+
+  # MinIO (встроенные метрики Prometheus)
+  - job_name: 'minio'
+    metrics_path: '/minio/v2/metrics/cluster'
+    static_configs:
+      - targets: ['minio:9000']
+        labels:
+          service: 'minio'
+    # MinIO требует аутентификацию
+    # basic_auth:
+    #   username: '${MINIO_ROOT_USER}'
+    #   password: '${MINIO_ROOT_PASSWORD}'
+
+  # # Producer (кастомные метрики)
+  # - job_name: 'producer'
+  #   static_configs:
+  #     - targets: ['producer:8000']
+  #       labels:
+  #         service: 'producer'
+
+  # # Consumer (кастомные метрики)
+  # - job_name: 'consumer'
+  #   static_configs:
+  #     - targets: ['bets_consumer:8001']
+  #       labels:
+  #         service: 'consumer'
+

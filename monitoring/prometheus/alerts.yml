@@ -1,0 +1,58 @@
+groups:
+  - name: bet_de_alerts
+    interval: 30s
+    rules:
+      # Kafka alerts
+      - alert: KafkaHighLag
+        expr: kafka_consumergroup_lag_sum > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer group {{ $labels.consumergroup }} has lag of {{ $value }} messages"
+
+      # PostgreSQL alerts
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool is nearly full"
+
+      # Flink alerts
+      - alert: FlinkJobFailed
+        expr: flink_jobmanager_job_status{status="FAILED"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Flink job {{ $labels.job_name }} has failed"
+
+      # Airflow alerts
+      - alert: AirflowDAGFailed
+        expr: increase(airflow_dagrun_failed[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Airflow DAG {{ $labels.dag_id }} has failed runs"
+
+      # System alerts
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} has high CPU usage"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} has high memory usage"
+

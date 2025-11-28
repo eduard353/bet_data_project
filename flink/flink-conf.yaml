@@ -1,0 +1,25 @@
+# Memory for framework's off-heap usage
+taskmanager.memory.framework.off-heap.size: 256m
+# Memory for task's off-heap usage
+taskmanager.memory.task.off-heap.size: 256m
+
+# Core cluster configuration
+jobmanager.rpc.address: jobmanager
+jobmanager.rpc.port: 6123
+jobmanager.memory.process.size: 1600m
+
+taskmanager.memory.process.size: 2304m
+taskmanager.numberOfTaskSlots: 1
+parallelism.default: 1
+
+# S3/MinIO configuration (overrides apply via env vars as needed)
+s3.endpoint: http://minio:9000
+s3.path-style-access: true
+
+# Prometheus Reporter для метрик
+metrics.reporters: prometheus
+metrics.reporter.prometheus.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+metrics.reporter.prometheus.host: 0.0.0.0
+metrics.reporter.prometheus.port: 9249
+metrics.reporter.prometheus.interval: 15 SECONDS
+

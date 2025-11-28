@@ -167,10 +167,10 @@ docker-compose ps
 После того как все сервисы запущены, можно запустить Flink jobs:
 
 ```bash
-docker exec -it jobmanager ./bin/flink run -py /opt/flink/jobs/job_top_games.py
-docker exec -it jobmanager ./bin/flink run -py /opt/flink/jobs/job_avg_bet.py
-docker exec -it jobmanager ./bin/flink run -py /opt/flink/jobs/job_bet_status.py
-docker exec -it jobmanager ./bin/flink run -py /opt/flink/jobs/job_active_users.py
+docker exec -it jobmanager /opt/flink/bin/flink run -py /opt/flink/jobs/job_top_games.py
+docker exec -it jobmanager /opt/flink/bin/flink run -py /opt/flink/jobs/job_avg_bet.py
+docker exec -it jobmanager /opt/flink/bin/flink run -py /opt/flink/jobs/job_bet_status.py
+docker exec -it jobmanager /opt/flink/bin/flink run -py /opt/flink/jobs/job_active_users.py
 ```
 
 Проверить статус jobs можно через Flink UI: http://localhost:8081

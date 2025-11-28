@@ -1,4 +1,0 @@
-# Memory for framework's off-heap usage
-taskmanager.memory.framework.off-heap.size: 256m
-# Memory for task's off-heap usage
-taskmanager.memory.task.off-heap.size: 256m

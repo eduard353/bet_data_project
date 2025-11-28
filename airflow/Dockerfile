@@ -5,6 +5,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 USER airflow
-RUN pip install --no-cache-dir boto3 pandas pyarrow sqlalchemy psycopg2-binary
+# Установка зависимостей для работы с данными и метриками
+RUN pip install --no-cache-dir boto3 pandas pyarrow sqlalchemy psycopg2-binary prometheus-client
 
 ENTRYPOINT ["/entrypoint.sh"]

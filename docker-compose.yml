@@ -45,6 +45,8 @@ services:
     env_file:
       - .env
     environment:
+      MINIO_PROMETHEUS_AUTH_TYPE: "public"
+      MINIO_PROMETHEUS_URL: "http://prometheus:9090"
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
@@ -90,7 +92,8 @@ services:
       KAFKA_CLIENT_ID: kowl
       KAFKA_GROUP_ID: kowl-group
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
@@ -172,25 +175,33 @@ services:
     ports:
       - "8081:8081"
     command: jobmanager
+    env_file:
+      - .env
     environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
-      - PYFLINK_PYTHON=python
-      - PYFLINK_CLIENT_USE_IPV6=False
-      - FLINK_TM_JVM_OPTIONS=-XX:MaxDirectMemorySize=256m
-      - jobmanager.rpc.address=jobmanager
-      - jobmanager.memory.process.size=1600m
-      - taskmanager.memory.process.size=2304m
-      - taskmanager.numberOfTaskSlots=1
-      - parallelism.default=1
-      - taskmanager.memory.task.off-heap.size=512m
-      - taskmanager.memory.framework.off-heap.size=128m
-      - taskmanager.memory.network.min=256m
-      - taskmanager.memory.network.max=256m
-      - taskmanager.memory.jvm-overhead.min=256m
-      - taskmanager.memory.jvm-overhead.max=256m
-      - taskmanager.memory.jvm-metaspace.size=256m
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: jobmanager
+        jobmanager.rpc.port: 6123
+        jobmanager.memory.process.size: 1600m
+        taskmanager.memory.process.size: 2304m
+        taskmanager.numberOfTaskSlots: 1
+        parallelism.default: 1
+        s3.endpoint: http://minio:9000
+        s3.path-style-access: true
+        metrics.reporters: prometheus
+        metrics.reporter.prometheus.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prometheus.host: 0.0.0.0
+        metrics.reporter.prometheus.port: 9249
+        metrics.reporter.prometheus.interval: 15 SECONDS
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      TOPIC_NAME: ${TOPIC_NAME}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
     volumes:
       - ./flink/jobs:/opt/flink/jobs
+      # - ./flink/flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
     depends_on:
       kafka:
         condition: service_healthy
@@ -204,24 +215,35 @@ services:
     build: ./flink
     container_name: taskmanager
     command: taskmanager
+    ports:
+      - "9249:9249"  # Prometheus metrics port
+    env_file:
+      - .env
     environment:
-      - JOB_MANAGER_RPC_ADDRESS=jobmanager
-      - PYFLINK_PYTHON=python
-      - PYFLINK_CLIENT_USE_IPV6=False
-      - FLINK_TM_JVM_OPTIONS=-XX:MaxDirectMemorySize=256m
-      - jobmanager.rpc.address=jobmanager
-      - taskmanager.memory.process.size=2304m
-      - taskmanager.numberOfTaskSlots=1
-      - parallelism.default=1
-      - taskmanager.memory.task.off-heap.size=512m
-      - taskmanager.memory.framework.off-heap.size=128m
-      - taskmanager.memory.network.min=256m
-      - taskmanager.memory.network.max=256m
-      - taskmanager.memory.jvm-overhead.min=256m
-      - taskmanager.memory.jvm-overhead.max=256m
-      - taskmanager.memory.jvm-metaspace.size=256m
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: jobmanager
+        jobmanager.rpc.port: 6123
+        jobmanager.memory.process.size: 1600m
+        taskmanager.memory.process.size: 2304m
+        taskmanager.numberOfTaskSlots: 1
+        parallelism.default: 1
+        s3.endpoint: http://minio:9000
+        s3.path-style-access: true
+        metrics.reporters: prometheus
+        metrics.reporter.prometheus.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prometheus.host: 0.0.0.0
+        metrics.reporter.prometheus.port: 9249
+        metrics.reporter.prometheus.interval: 15 SECONDS
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      TOPIC_NAME: ${TOPIC_NAME}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
     volumes:
       - ./flink/jobs:/opt/flink/jobs
+      # - ./flink/flink-conf.yaml:/opt/flink/conf/flink-conf.yaml
     depends_on:
       jobmanager:
         condition: service_started
@@ -252,6 +274,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # StatsD metrics configuration (для экспорта метрик в Prometheus)
+      AIRFLOW__METRICS__STATSD_ON: "True"
+      AIRFLOW__METRICS__STATSD_HOST: "statsd-exporter"
+      AIRFLOW__METRICS__STATSD_PORT: "9125"
+      AIRFLOW__METRICS__STATSD_PREFIX: "airflow"
     ports:
       - "8080:8080"
     volumes:
@@ -262,15 +289,151 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      statsd-exporter:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+  # StatsD Exporter (конвертирует StatsD метрики Airflow в Prometheus формат)
+  statsd-exporter:
+    image: prom/statsd-exporter:latest
+    container_name: statsd-exporter
+    ports:
+      - "9125:9125"  # StatsD UDP port
+      - "9102:9102"  # Prometheus metrics HTTP port
+    command:
+      - '--statsd.listen-udp=:9125'
+      - '--web.listen-address=:9102'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9102/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Kafka Exporter
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: kafka-exporter
+    ports:
+      - "9308:9308"
+    command:
+      - '--kafka.server=kafka:9092'
+      - '--web.listen-address=:9308'
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9308/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL Exporter
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node Exporter (системные метрики Docker контейнеров)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  # cAdvisor (метрики Docker контейнеров)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8085:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   #postgres_data:
   #kafka_data:
   minio_data:
   pgadmin_data:
+  prometheus_data:
+  grafana_data:
