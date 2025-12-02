@@ -31,7 +31,7 @@ Base = declarative_base()
 
 # --- SQLAlchemy Model ---
 class Bet(Base):
-    __tablename__ = "bets2"
+    __tablename__ = "bets"
 
     bet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 

@@ -27,9 +27,9 @@ S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY")
 S3_BUCKET = os.getenv("S3_BUCKET")
 
-# --- ORM-модель (соответствует bets2 из консьюмера) ---
+# --- ORM-модель (соответствует bets из консьюмера) ---
 class Bet(Base):
-    __tablename__ = "bets2"
+    __tablename__ = "bets"
     bet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False)
     # Основные поля для экспорта
@@ -57,7 +57,7 @@ class Bet(Base):
 def run_export():
     """Функция для Airflow PythonOperator"""
     # Валидация и подготовка настроек S3/MinIO
-    # Примечание: таблица bets2 создаётся консьюмером (all_bets_consumer.py),
+    # Примечание: таблица bets создаётся консьюмером (all_bets_consumer.py),
     # экспортер только читает данные из существующей таблицы
     endpoint = S3_ENDPOINT or "http://minio:9000"
     if not S3_ACCESS_KEY or not S3_SECRET_KEY:
@@ -77,7 +77,7 @@ def run_export():
         session.close()
         return
 
-    # 2. В DataFrame (только существующие в bets2 поля)
+    # 2. В DataFrame (только существующие в bets поля)
     rows = []
     for b in new_bets:
         rows.append({
